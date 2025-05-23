@@ -126,40 +126,12 @@ def make_content(item, img_url):
     parts.append(f"<p><a rel='noopener sponsored' href='{link}' target='_blank'><img src='{img_url}' alt='{item['title']}'/></a></p>")
     # タイトルリンク
     parts.append(f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>")
-    # サンプル画像
-    for sip in item.get('sample_images', []):
-        parts.append(f"<p><img src='{sip}' alt='sample image'/></p>")
     # 説明文
     parts.append(item['description_html'])
+    # サンプル画像（説明文の後、フッターリンクの前）
+    for sip in item.get('sample_images', []):
+        parts.append(f"<p><img src='{sip}' alt='sample image'/></p>")
     # フッターリンク
     parts.append(f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>")
-    return "\n".join(parts)
-
-# 既存タイトル取得
-def get_existing(client):
-    posts_list = client.call(posts.GetPosts({'number':100,'post_status':'publish'}))
-    return {p.title for p in posts_list}
-
-# メイン処理: 新しいアイテムを1件だけ投稿
-def main():
-    client = Client(WP_URL, WP_USER, WP_PASS)
-    published = get_existing(client)
-    items = fetch_dlsite_items()
-    for el in items:
-        it = parse_item(el)
-        if it['title'] in published:
-            continue
-        img_id = upload_image(client, it['main_image_url'], 'featured')
-        post = WordPressPost()
-        post.title = it['title']
-        if img_id:
-            post.thumbnail = img_id
-        post.terms_names = {'post_tag': it['tags']}
-        post.content = make_content(it, it['main_image_url'])
-        post.post_status = 'publish'
-        client.call(posts.NewPost(post))
-        print(f"✅ Posted: {it['title']}")
-        break
-
-if __name__ == '__main__':
-    main()
+    return "
+".join(parts)
