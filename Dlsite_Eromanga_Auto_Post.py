@@ -18,11 +18,11 @@ print("🧪 Running Dlsite_Eromanga_Auto_Post.py")
 
 # 環境変数読み込み
 AFFILIATE_ID = os.environ.get('AFFILIATE_ID')
-WP_URL = os.environ.get('WP_URL')
-WP_USER = os.environ.get('WP_USER')
-WP_PASS = os.environ.get('WP_PASS')
+WP_URL       = os.environ.get('WP_URL')
+WP_USER      = os.environ.get('WP_USER')
+WP_PASS      = os.environ.get('WP_PASS')
 
-# カスタムDLsite商品一覧を取得
+# DLsite商品一覧を取得
 def fetch_dlsite_items(limit=100):
     url = (
         'https://www.dlsite.com/maniax/fsr/=/language/jp/sex_category[0]/male/'
@@ -31,37 +31,34 @@ def fetch_dlsite_items(limit=100):
         'options_name[1]/言語不問作品/per_page/100/page/1/show_type/3/lang_options[0]/日本語/'
         'lang_options[1]/言語不要'
     )
-    print(f"🔍 Fetching URL: {url}")
     resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, 'html.parser')
-    ul = soup.select_one('ul#search_result_img_box')
-    works = ul.select('li.search_result_img_box_inner') if ul else []
-    print(f"🔎 Retrieved {len(works)} items")
-    return works[:limit]
+    items = soup.select('li.search_result_img_box_inner') or []
+    print(f"🔎 Retrieved {len(items)} items from list page")
+    return items[:limit]
 
 # 個別ページ解析
 def parse_item(el):
     a = el.select_one('dd.work_name a')
     title = a.get_text(strip=True)
-    href = a['href']
+    href  = a['href']
     detail_url = href if href.startswith('http') else 'https://www.dlsite.com' + href
-    m = re.search(r'/product_id/(RJ\d+)\.html', detail_url)
-    product_id = m.group(1) if m else ''
 
     resp = requests.get(detail_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     dsoup = BeautifulSoup(resp.text, 'html.parser')
 
+    # 説明HTML
     intro = dsoup.find('div', id='intro-title')
-    desc = dsoup.find('div', itemprop='description', class_='work_parts_container')
+    desc  = dsoup.find('div', itemprop='description', class_='work_parts_container')
     description_html = ''
     if intro:
         description_html += str(intro)
     if desc:
         description_html += str(desc)
 
-    # タグ取得: サークル名、作者、イラスト、シナリオ、ジャンル
+    # タグ取得
     tags = []
     for label in ['サークル名', '作者', 'イラスト', 'シナリオ', 'ジャンル']:
         th = dsoup.find('th', string=label)
@@ -75,99 +72,72 @@ def parse_item(el):
             for a_tag in td.select('a'):
                 tags.append(a_tag.get_text(strip=True))
 
-    # 画像取得: Open Graphタグを優先
-    og_img = dsoup.find('meta', property='og:image')
-    if og_img and og_img.get('content'):
-        main_img_url = og_img['content']
+    # 画像URL取得
+    og = dsoup.find('meta', property='og:image')
+    if og and og.get('content'):
+        main_img = og['content']
     else:
-        main_img_tag = dsoup.select_one('div#work_image_main img') or dsoup.find('img', id='main')
-        if main_img_tag:
-            src = main_img_tag.get('data-original') or main_img_tag.get('src') or ''
-            main_img_url = 'https:' + src if src.startswith('//') else src
+        img_tag = dsoup.select_one('div#work_image_main img') or dsoup.find('img', id='main')
+        if img_tag:
+            src = img_tag.get('data-original') or img_tag.get('src') or ''
+            main_img = ('https:' + src) if src.startswith('//') else src
         else:
-            main_img_url = ''
-    print(f"📷 Found main image: {main_img_url}")
+            main_img = ''
+    print(f"📷 Image URL: {main_img}")
 
     return {
         'title': title,
-        'product_id': product_id,
+        'product_id': re.search(r'/product_id/(RJ\d+)\.html', detail_url).group(1),
         'detail_url': detail_url,
         'description_html': description_html,
         'tags': tags,
-        'main_image_url': main_img_url,
-        'smp1_image_url': main_img_url
+        'main_image_url': main_img
     }
 
-# 画像をWPにアップロード
-def upload_image(client, image_url, label):
-    if not image_url:
-        print(f"⚠️ No {label} URL to upload")
+# 画像アップロード
+def upload_image(client, url, label):
+    if not url:
+        print(f"⚠️ {label}なし")
         return None
-    print(f"⬆️ Uploading {label}: {image_url}")
-    try:
-        resp = requests.get(image_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-        resp.raise_for_status()
-        mime_type = resp.headers.get('Content-Type', 'image/jpeg')
-        data = {
-            'name': os.path.basename(image_url),
-            'type': mime_type,
-            'bits': xmlrpc_client.Binary(resp.content)
-        }
-        result = client.call(media.UploadFile(data))
-        print(f"✅ Uploaded {label}: id={result.get('id')} url={result.get('url')}")
-        return result
-    except Exception as e:
-        print(f"❌ Failed to upload {label}: {e}")
-        return None
+    resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+    resp.raise_for_status()
+    data = {
+        'name': os.path.basename(url),
+        'type': resp.headers.get('Content-Type', 'image/jpeg'),
+        'bits': xmlrpc_client.Binary(resp.content)
+    }
+    result = client.call(media.UploadFile(data))
+    print(f"✅ Uploaded {label}: {result.get('id')}")
+    return result.get('id')
 
-# 投稿コンテンツ生成
-def generate_post_content(item, inline_url):
-    affiliate_link = (
-        f"https://dlaf.jp/maniax/dlaf/=/t/n/link/work/aid/{AFFILIATE_ID}/id/{item['product_id']}.html"
-    )
-    content = []
-    content.append(f"<p><a href='{inline_url}' target='_blank'><img src='{inline_url}' alt='{item['title']}'/></a></p>")
-    content.append(f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>")
-    content.append(item['description_html'])
-    content.append(f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>")
-    return '\n'.join(content)
+# 投稿本文生成
+def make_content(item, img_url):
+    link = f"https://dlaf.jp/maniax/dlaf/=/t/n/link/work/aid/{AFFILIATE_ID}/id/{item['product_id']}.html"
+    parts = []
+    parts.append(f"<p><a href='{img_url}' target='_blank'><img src='{img_url}'/></a></p>")
+    parts.append(f"<p><a href='{link}'>{item['title']}</a></p>")
+    parts.append(item['description_html'])
+    return '\n'.join(parts)
 
-# 既存投稿タイトル取得
-def get_published_titles(client, number=100):
-    existing = client.call(posts.GetPosts({'number': number, 'post_status': 'publish'}))
-    titles = [p.title for p in existing]
-    print(f"📑 Found {len(titles)} existing titles")
-    return set(titles)
-
-# WP投稿処理
-def post_to_wordpress(item):
-    client = Client(WP_URL, WP_USER, WP_PASS)
-    uploaded = upload_image(client, item['smp1_image_url'], 'featured')
-    image_id = uploaded.get('id') if uploaded else None
-    image_url = uploaded.get('url') if uploaded else item['smp1_image_url']
-
-    post = WordPressPost()
-    post.title = item['title']
-    if image_id:
-        post.thumbnail = image_id
-    post.content = generate_post_content(item, image_url)
-    post.post_status = 'publish'
-    post.custom_fields = [{'key': 'product_id', 'value': item['product_id']}]
-    if item['tags']:
-        post.terms_names = {'post_tag': item['tags']}
-    client.call(posts.NewPost(post))
-    print(f"✅ Published: {item['title']}")
+# 既存タイトル取得
+def get_existing(client):
+    posts_list = client.call(posts.GetPosts({'number': 100, 'post_status': 'publish'}))
+    return {p.title for p in posts_list}
 
 # メイン処理
-def main():
-    client = Client(WP_URL, WP_USER, WP_PASS)
-    published = get_published_titles(client)
-    works = fetch_dlsite_items()
-    items = [parse_item(el) for el in works]
-    new_items = [it for it in items if it['title'] not in published]
-    if not new_items:
-        print("⚠️ No new items to post")
-        return
-    post_to_wordpress(new_items[0])
-
 if __name__ == '__main__':
+    cli = Client(WP_URL, WP_USER, WP_PASS)
+    exist = get_existing(cli)
+    items = [parse_item(el) for el in fetch_dlsite_items()]
+    for it in items:
+        if it['title'] in exist:
+            continue
+        img_id = upload_image(cli, it['main_image_url'], 'featured')
+        post = WordPressPost()
+        post.title = it['title']
+        post.thumbnail = img_id
+        post.terms_names = {'post_tag': it['tags']}
+        post.content = make_content(it, it['main_image_url'])
+        post.post_status = 'publish'
+        cli.call(posts.NewPost(post))
+        print(f"✅ Posted: {it['title']}")
