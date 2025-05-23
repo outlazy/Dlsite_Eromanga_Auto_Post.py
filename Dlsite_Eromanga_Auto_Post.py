@@ -57,8 +57,9 @@ def parse_item(el):
     desc = dsoup.find('div', itemprop='description', class_='work_parts_container')
     description_html = (str(intro) if intro else '') + (str(desc) if desc else '')
 
+    # タグ取得: サークル名、作者、イラスト、シナリオ、ジャンル
     tags = []
-    for label in ['サークル名', 'シリーズ名', 'ジャンル', '声優']:
+    for label in ['サークル名', '作者', 'イラスト', 'シナリオ', 'ジャンル']:
         th = dsoup.find('th', string=label)
         if th:
             td = th.find_next_sibling('td')
@@ -69,6 +70,7 @@ def parse_item(el):
                 for a_tag in td.select('a'):
                     tags.append(a_tag.get_text(strip=True))
 
+    # 画像取得: Open Graphタグを優先
     og_img = dsoup.find('meta', property='og:image')
     if og_img and og_img.get('content'):
         main_img_url = og_img['content']
@@ -127,13 +129,9 @@ def generate_post_content(item, inline_image_url):
     affiliate_link = generate_affiliate_link(item)
     return (
         f"<p><a href='{inline_image_url}' target='_blank'>"
-        f"<img src='{
-inline_image_url}' alt='{item['title']}'/></a></p>
-"
-        f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>
-"
-        f"{item['description_html']}
-"
+        f"<img src='{inline_image_url}' alt='{item['title']}'/></a></p>\n"
+        f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>\n"
+        f"{item['description_html']}\n"
         f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>"
     )
 
@@ -176,4 +174,3 @@ def main():
     post_to_wordpress(new_items[0])
 
 if __name__ == '__main__':
-    main()
