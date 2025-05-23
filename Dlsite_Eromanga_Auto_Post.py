@@ -12,13 +12,13 @@ from wordpress_xmlrpc.compat import xmlrpc_client
 import collections.abc
 collections.Iterable = collections.abc.Iterable
 
-print("🧪 Running Dlsite_Eromanga_Auto_Post.py")
+print("🧪 Running Dlsite_Eromanga_Auto_Post.py with sample images")
 
 # 環境変数読み込み
 AFFILIATE_ID = os.environ.get('AFFILIATE_ID')
-WP_URL = os.environ.get('WP_URL')
-WP_USER = os.environ.get('WP_USER')
-WP_PASS = os.environ.get('WP_PASS')
+WP_URL       = os.environ.get('WP_URL')
+WP_USER      = os.environ.get('WP_USER')
+WP_PASS      = os.environ.get('WP_PASS')
 
 # 商品一覧取得
 def fetch_dlsite_items(limit=100):
@@ -28,7 +28,7 @@ def fetch_dlsite_items(limit=100):
         'options_and_or/and/options[0]/JPN/options[1]/NM/per_page/100/'
         'lang_options[0]/日本語/lang_options[1]/言語不要'
     )
-    resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+    resp = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, 'html.parser')
     items = soup.select('li.search_result_img_box_inner')
@@ -41,20 +41,23 @@ def parse_item(el):
     title = a.get_text(strip=True)
     href = a['href']
     detail_url = href if href.startswith('http') else 'https://www.dlsite.com' + href
-    resp = requests.get(detail_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+
+    resp = requests.get(detail_url, headers={'User-Agent':'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     dsoup = BeautifulSoup(resp.text, 'html.parser')
 
+    # 説明HTML
     intro = dsoup.find('div', id='intro-title')
-    desc = dsoup.find('div', itemprop='description', class_='work_parts_container')
+    desc  = dsoup.find('div', itemprop='description', class_='work_parts_container')
     description_html = ''
     if intro:
         description_html += str(intro)
     if desc:
         description_html += str(desc)
 
+    # タグ取得
     tags = []
-    for label in ['サークル名', '作者', 'イラスト', 'シナリオ', 'ジャンル']:
+    for label in ['サークル名','作者','イラスト','シナリオ','ジャンル']:
         th = dsoup.find('th', string=label)
         if not th:
             continue
@@ -66,6 +69,16 @@ def parse_item(el):
             for a_tag in td.select('a'):
                 tags.append(a_tag.get_text(strip=True))
 
+    # サンプル画像URL取得
+    sample_divs = dsoup.select('div.product-slider-data div[data-src]')
+    sample_images = []
+    for sd in sample_divs:
+        src = sd.get('data-src', '')
+        if src.startswith('//'):
+            src = 'https:' + src
+        sample_images.append(src)
+
+    # メイン画像URL取得
     og = dsoup.find('meta', property='og:image')
     if og and og.get('content'):
         main_img = og['content']
@@ -76,7 +89,7 @@ def parse_item(el):
             main_img = ('https:' + src) if src.startswith('//') else src
         else:
             main_img = ''
-    print(f"📷 Image URL: {main_img}")
+    print(f"📷 Main Image URL: {main_img}")
 
     product_id = re.search(r'/product_id/(RJ\d+)\.html', detail_url).group(1)
     return {
@@ -85,7 +98,8 @@ def parse_item(el):
         'detail_url': detail_url,
         'description_html': description_html,
         'tags': tags,
-        'main_image_url': main_img
+        'main_image_url': main_img,
+        'sample_images': sample_images
     }
 
 # 画像アップロード
@@ -93,7 +107,7 @@ def upload_image(client, url, label):
     if not url:
         print(f"⚠️ {label}なし")
         return None
-    resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+    resp = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     data = {
         'name': os.path.basename(url),
@@ -104,19 +118,26 @@ def upload_image(client, url, label):
     print(f"✅ Uploaded {label}: id={result.get('id')}")
     return result.get('id')
 
-# 投稿本文生成（画像にアフィリエイトリンクを付与）
+# 投稿本文生成 (画像とサンプル画像にアフィリエイトリンクを付与)
 def make_content(item, img_url):
     link = f"https://dlaf.jp/maniax/dlaf/=/t/n/link/work/aid/{AFFILIATE_ID}/id/{item['product_id']}.html"
-    return "\n".join([
-        f"<p><a rel='noopener sponsored' href='{link}' target='_blank'><img src='{img_url}' alt='{item['title']}'/></a></p>",
-        f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>",
-        item['description_html'],
-        f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>"
-    ])
+    parts = []
+    # メイン画像
+    parts.append(f"<p><a rel='noopener sponsored' href='{link}' target='_blank'><img src='{img_url}' alt='{item['title']}'/></a></p>")
+    # タイトルリンク
+    parts.append(f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>")
+    # サンプル画像
+    for sip in item.get('sample_images', []):
+        parts.append(f"<p><img src='{sip}' alt='sample image'/></p>")
+    # 説明文
+    parts.append(item['description_html'])
+    # フッターリンク
+    parts.append(f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>")
+    return "\n".join(parts)
 
 # 既存タイトル取得
 def get_existing(client):
-    posts_list = client.call(posts.GetPosts({'number':100, 'post_status':'publish'}))
+    posts_list = client.call(posts.GetPosts({'number':100,'post_status':'publish'}))
     return {p.title for p in posts_list}
 
 # メイン処理: 新しいアイテムを1件だけ投稿
