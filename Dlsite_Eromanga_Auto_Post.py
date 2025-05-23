@@ -24,16 +24,17 @@ WP_PASS      = os.environ.get('WP_PASS')
 def fetch_dlsite_items(limit=100):
     url = (
         'https://www.dlsite.com/maniax/fsr/=/language/jp/sex_category[0]/male/'
-        'work_category[0]/doujin/order/release_d/work_type[0]/MNG/'
-        'options_and_or/and/options[0]/JPN/options[1]/NM/per_page/100/'
-        'lang_options[0]/日本語/lang_options[1]/言語不要'
+        'work_category[0]/doujin/order[0]/trend/work_type[0]/MNG/'
+        'work_type_name[0]/マンガ/options_and_or/and/options[0]/JPN/'
+        'options[1]/NM/options_name[0]/日本語作品/options_name[1]/言語不問作品/'
+        'per_page/100/page/1/show_type/3/lang_options[0]/日本語/lang_options[1]/言語不要'
     )
     resp = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, 'html.parser')
     items = soup.select('li.search_result_img_box_inner')
     print(f"🔎 Retrieved {len(items)} items from list page")
-    return items[:limit]
+    return items[:limit][:limit]
 
 # 個別ページ解析
 def parse_item(el):
