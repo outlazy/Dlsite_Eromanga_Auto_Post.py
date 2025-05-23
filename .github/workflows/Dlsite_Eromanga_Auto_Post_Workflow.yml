@@ -1,1 +1,39 @@
+# GitHub Actions workflow to schedule Dlsite Eromanga Auto Post
+# Runs at 01:00, 07:00, 13:00, 19:00 JST (UTC+9)
+# Converted to UTC: 16:00, 22:00, 04:00, 10:00 UTC daily
 
+name: Dlsite Eromanga Auto Post
+
+on:
+  schedule:
+    - cron: '0 16 * * *'  # 01:00 JST
+    - cron: '0 22 * * *'  # 07:00 JST
+    - cron: '0 4 * * *'   # 13:00 JST
+    - cron: '0 10 * * *'  # 19:00 JST
+
+jobs:
+  post:
+    name: Fetch and Publish Dlsite Eromanga
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 python-wordpress-xmlrpc
+
+      - name: Run Dlsite Eromanga Auto Post Script
+        env:
+          AFFILIATE_ID: ${{ secrets.AFFILIATE_ID }}
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_PASS: ${{ secrets.WP_PASS }}
+        run: python Dlsite_Eromanga_Auto_Post.py
