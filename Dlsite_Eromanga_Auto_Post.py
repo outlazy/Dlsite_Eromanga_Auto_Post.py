@@ -18,9 +18,9 @@ print("🧪 Running Dlsite_Eromanga_Auto_Post.py")
 
 # 環境変数読み込み
 AFFILIATE_ID = os.environ.get('AFFILIATE_ID')
-WP_URL       = os.environ.get('WP_URL')
-WP_USER      = os.environ.get('WP_USER')
-WP_PASS      = os.environ.get('WP_PASS')
+WP_URL = os.environ.get('WP_URL')
+WP_USER = os.environ.get('WP_USER')
+WP_PASS = os.environ.get('WP_PASS')
 
 # カスタムDLsite商品一覧を取得
 def fetch_dlsite_items(limit=100):
@@ -55,20 +55,25 @@ def parse_item(el):
 
     intro = dsoup.find('div', id='intro-title')
     desc = dsoup.find('div', itemprop='description', class_='work_parts_container')
-    description_html = (str(intro) if intro else '') + (str(desc) if desc else '')
+    description_html = ''
+    if intro:
+        description_html += str(intro)
+    if desc:
+        description_html += str(desc)
 
     # タグ取得: サークル名、作者、イラスト、シナリオ、ジャンル
     tags = []
     for label in ['サークル名', '作者', 'イラスト', 'シナリオ', 'ジャンル']:
         th = dsoup.find('th', string=label)
-        if th:
-            td = th.find_next_sibling('td')
-            if label == 'ジャンル':
-                for a_genre in td.select('div.main_genre a'):
-                    tags.append(a_genre.get_text(strip=True))
-            else:
-                for a_tag in td.select('a'):
-                    tags.append(a_tag.get_text(strip=True))
+        if not th:
+            continue
+        td = th.find_next_sibling('td')
+        if label == 'ジャンル':
+            for a_genre in td.select('div.main_genre a'):
+                tags.append(a_genre.get_text(strip=True))
+        else:
+            for a_tag in td.select('a'):
+                tags.append(a_tag.get_text(strip=True))
 
     # 画像取得: Open Graphタグを優先
     og_img = dsoup.find('meta', property='og:image')
@@ -83,8 +88,6 @@ def parse_item(el):
             main_img_url = ''
     print(f"📷 Found main image: {main_img_url}")
 
-    smp1_img_url = main_img_url
-
     return {
         'title': title,
         'product_id': product_id,
@@ -92,7 +95,7 @@ def parse_item(el):
         'description_html': description_html,
         'tags': tags,
         'main_image_url': main_img_url,
-        'smp1_image_url': smp1_img_url
+        'smp1_image_url': main_img_url
     }
 
 # 画像をWPにアップロード
@@ -112,28 +115,22 @@ def upload_image(client, image_url, label):
         }
         result = client.call(media.UploadFile(data))
         print(f"✅ Uploaded {label}: id={result.get('id')} url={result.get('url')}")
-        return {'id': result.get('id'), 'url': result.get('url')}
+        return result
     except Exception as e:
         print(f"❌ Failed to upload {label}: {e}")
         return None
 
-# アフィリエイトリンク生成
-def generate_affiliate_link(item):
-    return (
-        f"https://dlaf.jp/maniax/dlaf/=/t/n/link/work/aid/"
-        f"{AFFILIATE_ID}/id/{item['product_id']}.html"
-    )
-
 # 投稿コンテンツ生成
-def generate_post_content(item, inline_image_url):
-    affiliate_link = generate_affiliate_link(item)
-    return (
-        f"<p><a href='{inline_image_url}' target='_blank'>"
-        f"<img src='{inline_image_url}' alt='{item['title']}'/></a></p>\n"
-        f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>\n"
-        f"{item['description_html']}\n"
-        f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>"
+def generate_post_content(item, inline_url):
+    affiliate_link = (
+        f"https://dlaf.jp/maniax/dlaf/=/t/n/link/work/aid/{AFFILIATE_ID}/id/{item['product_id']}.html"
     )
+    content = []
+    content.append(f"<p><a href='{inline_url}' target='_blank'><img src='{inline_url}' alt='{item['title']}'/></a></p>")
+    content.append(f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>")
+    content.append(item['description_html'])
+    content.append(f"<p><a rel='noopener sponsored' href='{affiliate_link}' target='_blank'>{item['title']}</a></p>")
+    return '\n'.join(content)
 
 # 既存投稿タイトル取得
 def get_published_titles(client, number=100):
@@ -145,15 +142,15 @@ def get_published_titles(client, number=100):
 # WP投稿処理
 def post_to_wordpress(item):
     client = Client(WP_URL, WP_USER, WP_PASS)
-    featured = upload_image(client, item['smp1_image_url'], 'featured')
-    inline   = upload_image(client, item['main_image_url'], 'inline')
+    uploaded = upload_image(client, item['smp1_image_url'], 'featured')
+    image_id = uploaded.get('id') if uploaded else None
+    image_url = uploaded.get('url') if uploaded else item['smp1_image_url']
 
     post = WordPressPost()
     post.title = item['title']
-    if featured and featured.get('id'):
-        post.thumbnail = featured['id']
-    inline_url = inline['url'] if inline and inline.get('url') else item['main_image_url']
-    post.content = generate_post_content(item, inline_url)
+    if image_id:
+        post.thumbnail = image_id
+    post.content = generate_post_content(item, image_url)
     post.post_status = 'publish'
     post.custom_fields = [{'key': 'product_id', 'value': item['product_id']}]
     if item['tags']:
