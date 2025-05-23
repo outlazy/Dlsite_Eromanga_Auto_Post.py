@@ -31,6 +31,7 @@ def fetch_dlsite_items(limit=100):
         'options_name[1]/言語不問作品/per_page/100/page/1/show_type/3/lang_options[0]/日本語/'
         'lang_options[1]/言語不要'
     )
+    print(f"🔍 Fetching URL: {url}")
     resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, 'html.parser')
@@ -42,7 +43,7 @@ def fetch_dlsite_items(limit=100):
 def parse_item(el):
     a = el.select_one('dd.work_name a')
     title = a.get_text(strip=True)
-    href  = a['href']
+    href = a['href']
     detail_url = href if href.startswith('http') else 'https://www.dlsite.com' + href
 
     resp = requests.get(detail_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
