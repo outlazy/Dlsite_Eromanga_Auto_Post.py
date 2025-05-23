@@ -12,8 +12,6 @@ from wordpress_xmlrpc.compat import xmlrpc_client
 import collections.abc
 collections.Iterable = collections.abc.Iterable
 
-print("🧪 Running Dlsite_Eromanga_Auto_Post.py")
-
 # 環境変数読み込み
 AFFILIATE_ID = os.environ.get('AFFILIATE_ID')
 WP_URL       = os.environ.get('WP_URL')
@@ -46,6 +44,7 @@ def parse_item(el):
     resp.raise_for_status()
     dsoup = BeautifulSoup(resp.text, 'html.parser')
 
+    # 説明HTML
     intro = dsoup.find('div', id='intro-title')
     desc  = dsoup.find('div', itemprop='description', class_='work_parts_container')
     description_html = ''
@@ -54,6 +53,7 @@ def parse_item(el):
     if desc:
         description_html += str(desc)
 
+    # タグ取得
     tags = []
     for label in ['サークル名','作者','イラスト','シナリオ','ジャンル']:
         th = dsoup.find('th', string=label)
@@ -67,13 +67,17 @@ def parse_item(el):
             for a_tag in td.select('a'):
                 tags.append(a_tag.get_text(strip=True))
 
+    # 画像URL取得
     og = dsoup.find('meta', property='og:image')
     if og and og.get('content'):
         main_img = og['content']
     else:
         img_tag = dsoup.select_one('div#work_image_main img') or dsoup.find('img', id='main')
-        src = img_tag.get('data-original') or img_tag.get('src') if img_tag else ''
-        main_img = ('https:' + src) if src.startswith('//') else src
+        if img_tag:
+            src = img_tag.get('data-original') or img_tag.get('src')
+            main_img = ('https:' + src) if src.startswith('//') else src
+        else:
+            main_img = ''
     print(f"📷 Image URL: {main_img}")
 
     product_id = re.search(r'/product_id/(RJ\d+)\.html', detail_url).group(1)
@@ -131,4 +135,12 @@ def main():
         post.title = it['title']
         if img_id:
             post.thumbnail = img_id
-        post.term...vh...```
+        post.terms_names = {'post_tag': it['tags']}
+        post.content = make_content(it, it['main_image_url'])
+        post.post_status = 'publish'
+        client.call(posts.NewPost(post))
+        print(f"✅ Posted: {it['title']}")
+        break
+
+if __name__ == '__main__':
+    main()
