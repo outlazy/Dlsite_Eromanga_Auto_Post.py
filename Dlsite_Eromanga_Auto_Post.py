@@ -135,3 +135,4 @@ def make_content(item, img_url):
     parts.append(f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>")
     return "
 ".join(parts)
+".join(parts)
