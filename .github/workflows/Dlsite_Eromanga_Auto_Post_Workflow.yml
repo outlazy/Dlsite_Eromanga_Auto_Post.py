@@ -1,14 +1,16 @@
 # GitHub Actions workflow to schedule Dlsite Eromanga Auto Post
 # Runs at 01:00, 07:00, 13:00, 19:00 JST (UTC+9)
-# Converted to UTC: 16:00, 22:00, 04:00, 10:00 UTC daily
 
 name: Dlsite Eromanga Auto Post
 
 on:
+  # 手動実行を可能にする
+  workflow_dispatch:
+  # 定期実行設定
   schedule:
     - cron: '0 16 * * *'  # 01:00 JST
     - cron: '0 22 * * *'  # 07:00 JST
-    - cron: '0 4 * * *'   # 13:00 JST
+    - cron: '0 4  * * *'  # 13:00 JST
     - cron: '0 10 * * *'  # 19:00 JST
 
 jobs:
