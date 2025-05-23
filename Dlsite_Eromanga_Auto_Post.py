@@ -9,10 +9,10 @@ from bs4 import BeautifulSoup
 from wordpress_xmlrpc import Client, WordPressPost
 from wordpress_xmlrpc.methods import posts, media
 from wordpress_xmlrpc.compat import xmlrpc_client
-
-# Iterable compatibility
 import collections.abc
 collections.Iterable = collections.abc.Iterable
+
+print("🧪 Running Dlsite_Eromanga_Auto_Post.py")
 
 # 環境変数読み込み
 AFFILIATE_ID = os.environ.get('AFFILIATE_ID')
@@ -33,7 +33,7 @@ def fetch_dlsite_items(limit=100):
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, 'html.parser')
     items = soup.select('li.search_result_img_box_inner')
-    print(f"🔎 Retrieved {len(items)} items")
+    print(f"🔎 Retrieved {len(items)} items from list page")
     return items[:limit]
 
 # 個別ページ解析
@@ -46,7 +46,6 @@ def parse_item(el):
     resp.raise_for_status()
     dsoup = BeautifulSoup(resp.text, 'html.parser')
 
-    # 説明文
     intro = dsoup.find('div', id='intro-title')
     desc  = dsoup.find('div', itemprop='description', class_='work_parts_container')
     description_html = ''
@@ -55,7 +54,6 @@ def parse_item(el):
     if desc:
         description_html += str(desc)
 
-    # タグ取得
     tags = []
     for label in ['サークル名','作者','イラスト','シナリオ','ジャンル']:
         th = dsoup.find('th', string=label)
@@ -69,7 +67,6 @@ def parse_item(el):
             for a_tag in td.select('a'):
                 tags.append(a_tag.get_text(strip=True))
 
-    # 画像URL
     og = dsoup.find('meta', property='og:image')
     if og and og.get('content'):
         main_img = og['content']
@@ -81,35 +78,35 @@ def parse_item(el):
 
     product_id = re.search(r'/product_id/(RJ\d+)\.html', detail_url).group(1)
     return {
-        'title':title,
-        'product_id':product_id,
-        'detail_url':detail_url,
-        'description_html':description_html,
-        'tags':tags,
-        'main_image_url':main_img
+        'title': title,
+        'product_id': product_id,
+        'detail_url': detail_url,
+        'description_html': description_html,
+        'tags': tags,
+        'main_image_url': main_img
     }
 
 # 画像アップロード
-def upload_image(client,url,label):
+def upload_image(client, url, label):
     if not url:
         print(f"⚠️ {label}なし")
         return None
     resp = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=10)
     resp.raise_for_status()
     data = {
-        'name':os.path.basename(url),
-        'type':resp.headers.get('Content-Type'),
-        'bits':xmlrpc_client.Binary(resp.content)
+        'name': os.path.basename(url),
+        'type': resp.headers.get('Content-Type'),
+        'bits': xmlrpc_client.Binary(resp.content)
     }
     result = client.call(media.UploadFile(data))
     print(f"✅ Uploaded {label}: id={result.get('id')}")
     return result.get('id')
 
-# 投稿本文生成
-def make_content(item,img_url):
+# 投稿本文生成 (画像にアフィリエイトリンクを付与)
+def make_content(item, img_url):
     link = f"https://dlaf.jp/maniax/dlaf/=/t/n/link/work/aid/{AFFILIATE_ID}/id/{item['product_id']}.html"
     return "\n".join([
-        f"<p><a href='{img_url}' target='_blank'><img src='{img_url}'/></a></p>",
+        f"<p><a rel='noopener sponsored' href='{link}' target='_blank'><img src='{img_url}' alt='{item['title']}'/></a></p>",
         f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>",
         item['description_html'],
         f"<p><a rel='noopener sponsored' href='{link}' target='_blank'>{item['title']}</a></p>"
@@ -120,20 +117,18 @@ def get_existing(client):
     posts_list = client.call(posts.GetPosts({'number':100,'post_status':'publish'}))
     return {p.title for p in posts_list}
 
-# メイン
-if __name__=='__main__':
-    client = Client(WP_URL,WP_USER,WP_PASS)
+# メイン処理: 新しいアイテムを1件だけ投稿
+def main():
+    client = Client(WP_URL, WP_USER, WP_PASS)
     published = get_existing(client)
-    for item in fetch_dlsite_items():
-        it = parse_item(item)
+    items = fetch_dlsite_items()
+    for el in items:
+        it = parse_item(el)
         if it['title'] in published:
             continue
-        img_id = upload_image(client,it['main_image_url'],'featured')
+        img_id = upload_image(client, it['main_image_url'], 'featured')
         post = WordPressPost()
         post.title = it['title']
-        if img_id: post.thumbnail = img_id
-        post.terms_names = {'post_tag':it['tags']}
-        post.content = make_content(it,it['main_image_url'])
-        post.post_status = 'publish'
-        client.call(posts.NewPost(post))
-        print(f"✅ Posted: {it['title']}")
+        if img_id:
+            post.thumbnail = img_id
+        post.term...vh...```
