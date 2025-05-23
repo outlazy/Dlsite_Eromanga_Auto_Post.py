@@ -118,7 +118,8 @@ def make_content(item, img_url):
     parts.append(f"<p><a href='{img_url}' target='_blank'><img src='{img_url}'/></a></p>")
     parts.append(f"<p><a href='{link}'>{item['title']}</a></p>")
     parts.append(item['description_html'])
-    return '\n'.join(parts)
+    return '
+'.join(parts)
 
 # 既存タイトル取得
 def get_existing(client):
